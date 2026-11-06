@@ -1,7 +1,7 @@
 {
   "domain": "vn_weather_ha",
   "name": "VN Weather HA",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "codeowners": [
     "@khaisilk1910"
   ],

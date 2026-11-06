@@ -268,43 +268,113 @@
   }
 
   class VNWeatherHACardEditor extends HTMLElement {
-    constructor(){super();this.attachShadow({mode:'open'});this._config={};this._hass=null;
-      this.shadowRoot.addEventListener('change',evt=>this._onChange(evt));}
-    setConfig(config){this._config={...config};this._render();}
-    set hass(value){this._hass=value;this._render();}
-    _onChange(evt){
-      const input = evt.target;
+    constructor() {
+      super();
+      this.attachShadow({mode:'open'});
+      this._config = {};
+      this._hass = null;
+      this._rendered = false;
+      this._entitiesFingerprint = '';
+      this._deferredEntityUpdate = false;
+      this.shadowRoot.addEventListener('change', event => this._onChange(event));
+      this.shadowRoot.addEventListener('focusout', event => {
+        // Never replace an open native <select>; changing its options closes its popup.
+        if (event.target?.name === 'entity' && this._deferredEntityUpdate) {
+          this._syncWeatherEntities();
+        }
+      });
+    }
+    setConfig(config) {
+      this._config = {...(config || {})};
+      this._ensureForm();
+      // Home Assistant may call setConfig after every edit. Preserve focused nodes.
+      this._syncWeatherEntities();
+      this._syncControls();
+    }
+    set hass(value) {
+      // HA updates hass on *every* state change, often while a select is open.
+      // Do not rebuild the form here: only the entity dropdown may need new options.
+      this._hass = value;
+      this._ensureForm();
+      this._syncWeatherEntities();
+    }
+    _onChange(event) {
+      const input = event.target;
       if (!input?.name) return;
-      const value = input.type==='checkbox' ? input.checked : input.name==='forecast_slots' ? Number(input.value) : input.value;
-      this._config = {...this._config,[input.name]:value};
+      const value = input.type === 'checkbox' ? input.checked
+        : input.name === 'forecast_slots' ? Number(input.value) : input.value;
+      if (this._config[input.name] === value) return;
+      this._config = {...this._config, [input.name]:value};
       this.dispatchEvent(new CustomEvent('config-changed', {
         detail:{config:{...this._config}}, bubbles:true, composed:true,
       }));
     }
-    _render(){
-      if (!this.shadowRoot) return;
-      const cfg=this._config;
-      const entities=Object.keys(this._hass?.states || {}).filter(key=>key.startsWith('weather.')).sort();
-      const options=entities.map(key=>`<option value="${escapeHtml(key)}" ${key===cfg.entity?'selected':''}>${escapeHtml(this._hass?.states[key]?.attributes?.friendly_name || key)} · ${escapeHtml(key)}</option>`).join('');
-      this.shadowRoot.innerHTML=`<style>
+    _ensureForm() {
+      if (this._rendered) return;
+      // Build the form only once. Replacing innerHTML while the user is interacting
+      // with a native dropdown destroys its DOM node and dismisses the popup.
+      this.shadowRoot.innerHTML = `<style>
         :host{display:block;font-family:var(--primary-font-family,system-ui);color:var(--primary-text-color)}
         .form{display:grid;gap:12px;padding:10px 2px}label{display:grid;gap:5px;font-size:13px;font-weight:600}
         select,input:not([type=checkbox]){width:100%;min-width:0;box-sizing:border-box;border:1px solid var(--divider-color,#ccc);
           border-radius:9px;padding:11px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#111);font:inherit}
         .check{display:flex;gap:10px;align-items:center}.check input{width:18px;height:18px}
       </style><div class="form">
-        <label>Weather entity <select name="entity"><option value="">-- Select weather entity --</option>${options}</select></label>
-        <label>Title <input name="name" value="${escapeHtml(cfg.name || '')}" placeholder="VN Weather HA" /></label>
-        <label>Layout <select name="mode"><option value="detailed" ${cfg.mode!=='compact'?'selected':''}>Detailed</option>
-          <option value="compact" ${cfg.mode==='compact'?'selected':''}>Compact</option></select></label>
-        <label>Forecast view <select name="forecast_type"><option value="hourly" ${cfg.forecast_type!=='daily'?'selected':''}>Hourly</option>
-          <option value="daily" ${cfg.forecast_type==='daily'?'selected':''}>Daily</option></select></label>
-        <label>Forecast slots <select name="forecast_slots">${[3,4,5,6,7,8].map(v=>`<option value="${v}" ${Number(cfg.forecast_slots||5)===v?'selected':''}>${v}</option>`).join('')}</select></label>
-        <label>Language <select name="language"><option value="auto" ${!cfg.language||cfg.language==='auto'?'selected':''}>Auto</option>
-          <option value="vi" ${cfg.language==='vi'?'selected':''}>Tiếng Việt</option><option value="en" ${cfg.language==='en'?'selected':''}>English</option></select></label>
-        <label class="check"><input name="show_forecast" type="checkbox" ${cfg.show_forecast!==false?'checked':''}>Show forecast</label>
-        <label class="check"><input name="show_source" type="checkbox" ${cfg.show_source!==false?'checked':''}>Show data source / refresh</label>
+        <label>Weather entity <select name="entity"><option value="">-- Select weather entity --</option></select></label>
+        <label>Title <input name="name" placeholder="VN Weather HA" /></label>
+        <label>Layout <select name="mode"><option value="detailed">Detailed</option>
+          <option value="compact">Compact</option></select></label>
+        <label>Forecast view <select name="forecast_type"><option value="hourly">Hourly</option>
+          <option value="daily">Daily</option></select></label>
+        <label>Forecast slots <select name="forecast_slots">${[3,4,5,6,7,8].map(v=>`<option value="${v}">${v}</option>`).join('')}</select></label>
+        <label>Language <select name="language"><option value="auto">Auto</option>
+          <option value="vi">Tiếng Việt</option><option value="en">English</option></select></label>
+        <label class="check"><input name="show_forecast" type="checkbox">Show forecast</label>
+        <label class="check"><input name="show_source" type="checkbox">Show data source / refresh</label>
       </div>`;
+      this._rendered = true;
+      this._syncControls();
+    }
+    _syncControls() {
+      if (!this._rendered) return;
+      const cfg = this._config;
+      const defaults = {name:'', entity:'', mode:'detailed', forecast_type:'hourly',
+        forecast_slots:5, language:'auto', show_forecast:true, show_source:true};
+      for (const input of this.shadowRoot.querySelectorAll('[name]')) {
+        // The select popup and in-progress text must survive an external config update.
+        if (input === this.shadowRoot.activeElement) continue;
+        const value = cfg[input.name] ?? defaults[input.name];
+        if (input.type === 'checkbox') {
+          if (input.checked !== Boolean(value)) input.checked = Boolean(value);
+        } else if (input.value !== String(value)) {
+          input.value = String(value);
+        }
+      }
+    }
+    _syncWeatherEntities() {
+      if (!this._hass || !this._rendered) return;
+      const select = this.shadowRoot.querySelector('select[name="entity"]');
+      if (!select) return;
+      const states = this._hass.states || {};
+      const records = Object.keys(states).filter(key => key.startsWith('weather.')).sort()
+        .map(key => [key, states[key]?.attributes?.friendly_name || key]);
+      const fingerprint = JSON.stringify([records, this._config.entity || '']);
+      if (fingerprint === this._entitiesFingerprint) {
+        this._deferredEntityUpdate = false;
+        return;
+      }
+      if (this.shadowRoot.activeElement === select) {
+        this._deferredEntityUpdate = true;
+        return;
+      }
+      const selected = this._config.entity || select.value || '';
+      // Keep configured entities visible even when temporarily unavailable.
+      if (selected && !records.some(([key]) => key === selected)) records.push([selected, selected]);
+      select.innerHTML = '<option value="">-- Select weather entity --</option>' +
+        records.map(([key, label]) => `<option value="${escapeHtml(key)}">${escapeHtml(label)} · ${escapeHtml(key)}</option>`).join('');
+      select.value = selected;
+      this._entitiesFingerprint = fingerprint;
+      this._deferredEntityUpdate = false;
     }
   }
   if (!customElements.get(TAG)) customElements.define(TAG,VNWeatherHACard);
