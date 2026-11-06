@@ -1,0 +1,71 @@
+name: Publish VN Weather HA release
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'SemVer without v prefix, e.g. 0.2.1'
+        required: true
+        type: string
+permissions:
+  contents: write
+concurrency:
+  group: vn-weather-ha-release
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate tag and align version before publishing
+        env:
+          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python scripts/set_version.py "$VERSION"
+          if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION"; then
+            echo "Tag v$VERSION already exists"; exit 1
+          fi
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            echo "Release v$VERSION already exists"; exit 1
+          fi
+      - name: Verify same revision will be published
+        run: |
+          python -m pip install pytest
+          python -m compileall -q custom_components/vn_weather_ha
+          python -m pytest -q tests
+          node --check custom_components/vn_weather_ha/frontend/vn-weather-ha-card.js
+          node tests/test_card_node.js
+          python scripts/package.py
+      - name: Commit manifest and create matching tag
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add custom_components/vn_weather_ha/manifest.json custom_components/vn_weather_ha/const.py
+          git diff --cached --quiet || git commit -m "chore(release): v$VERSION"
+          git fetch origin main
+          test "$(git merge-base HEAD origin/main)" = "$(git rev-parse origin/main)" || {
+            echo 'main branch advanced; run again from latest main'; exit 1;
+          }
+          git tag "v$VERSION"
+          git push origin HEAD:main
+          git push origin "v$VERSION"
+      - name: Publish GitHub release with installation archives
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          gh release create "v$VERSION" dist/VN-Weather-HA-"$VERSION"-Manual.zip dist/VN-Weather-HA-"$VERSION"-Marketplace.zip \
+            --target "$(git rev-parse HEAD)" --title "VN Weather HA v$VERSION" --generate-notes
