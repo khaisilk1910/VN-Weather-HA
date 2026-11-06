@@ -1,0 +1,23 @@
+{
+  "config": {
+    "step": {"user": {
+      "title": "Thêm địa điểm VN Weather HA",
+      "description": "Open-Meteo miễn phí, không cần API key. Dữ liệu thời tiết: Open-Meteo.com (CC BY 4.0).",
+      "data": {"location_name": "Tên địa điểm", "latitude": "Vĩ độ", "longitude": "Kinh độ"}
+    }},
+    "abort": {"already_configured": "Địa điểm này đã được cấu hình."}
+  },
+  "options": {
+    "step": {"init": {
+      "title": "Cài đặt VN Weather HA",
+      "description": "MET Norway chỉ được sử dụng khi Open-Meteo lỗi. Chỉ số thiếu sẽ không bị tự suy đoán.",
+      "data": {
+        "model": "Mô hình dự báo",
+        "met_fallback": "Dùng MET Norway khi Open-Meteo không truy cập được",
+        "forecast_days": "Số ngày dự báo",
+        "refresh_minutes": "Chu kỳ cập nhật (15–120 phút)",
+        "stale_hours": "Cho phép cache cũ tối đa (giờ)"
+      }
+    }}
+  }
+}

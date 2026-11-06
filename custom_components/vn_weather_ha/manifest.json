@@ -1,0 +1,18 @@
+{
+  "domain": "vn_weather_ha",
+  "name": "VN Weather HA",
+  "version": "0.2.0",
+  "codeowners": [
+    "@khaisilk1910"
+  ],
+  "documentation": "https://github.com/khaisilk1910/VN-Weather-HA",
+  "issue_tracker": "https://github.com/khaisilk1910/VN-Weather-HA/issues",
+  "config_flow": true,
+  "iot_class": "cloud_polling",
+  "integration_type": "service",
+  "requirements": [],
+  "after_dependencies": [
+    "http",
+    "lovelace"
+  ]
+}

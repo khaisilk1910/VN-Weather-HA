@@ -1,0 +1,23 @@
+{
+  "config": {
+    "step": {"user": {
+      "title": "Add VN Weather HA location",
+      "description": "Open-Meteo free API. No API key required. Weather data by Open-Meteo.com (CC BY 4.0).",
+      "data": {"location_name": "Location name", "latitude": "Latitude", "longitude": "Longitude"}
+    }},
+    "abort": {"already_configured": "This location has already been configured."}
+  },
+  "options": {
+    "step": {"init": {
+      "title": "VN Weather HA settings",
+      "description": "The MET Norway fallback is used only when Open-Meteo fails. Missing values are not invented.",
+      "data": {
+        "model": "Forecast model",
+        "met_fallback": "Use MET Norway if Open-Meteo is unavailable",
+        "forecast_days": "Days of forecast",
+        "refresh_minutes": "Refresh interval (15–120 minutes)",
+        "stale_hours": "Allow stale cache for up to (hours)"
+      }
+    }}
+  }
+}
