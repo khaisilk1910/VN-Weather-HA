@@ -72,8 +72,14 @@
       background:radial-gradient(circle,rgba(255,255,255,.15),transparent 67%);animation:vnh-pulse 9s ease-in-out infinite;z-index:-1}
     .main {padding:21px 22px 18px}.head,.bottom,.section-bar,.forecast-row {display:flex;justify-content:space-between;align-items:center;gap:10px}
     .eyebrow{font-size:10px;font-weight:800;letter-spacing:.16em;color:#cff6ff}.title{margin:5px 0 0;font-size:20px;font-weight:750;overflow-wrap:anywhere}
-    .mode{color:#f9feff;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.35);border-radius:999px;
-      padding:8px 11px;font-size:12px;cursor:pointer;white-space:nowrap;min-height:34px;font-family:inherit}
+    .head{position:relative;z-index:2}.head-copy{min-width:0;flex:1}
+    .mode{position:relative;z-index:3;display:inline-flex;align-items:center;justify-content:center;
+      min-width:105px;min-height:44px;box-sizing:border-box;flex-shrink:0;pointer-events:auto;
+      color:#f9feff;background:rgba(255,255,255,.17);border:1px solid rgba(255,255,255,.46);border-radius:999px;
+      padding:11px 15px;font-size:12px;font-weight:650;cursor:pointer;white-space:nowrap;font-family:inherit;
+      touch-action:manipulation;user-select:none;-webkit-user-select:none;transition:background .16s ease,box-shadow .16s ease}
+    .mode:hover{background:rgba(255,255,255,.27);box-shadow:0 2px 12px rgba(3,24,54,.19)}
+    .mode:active{background:rgba(255,255,255,.35)}
     button:focus-visible,.hero:focus-visible{outline:3px solid #f5f9a5;outline-offset:3px}
     .hero{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:18px 0 17px;cursor:pointer;border-radius:12px}
     .temperature {font-size:clamp(48px,7vw,78px);font-weight:760;line-height:1;letter-spacing:-.055em;font-variant-numeric:tabular-nums}
@@ -86,7 +92,7 @@
     .value{font-size:15px;font-weight:750;margin-top:6px;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
     .line{height:1px;background:rgba(255,255,255,.21);margin:17px 0 13px}.section-bar{margin-bottom:12px}
     .section-title{font-size:13px;font-weight:750}.tabs{display:flex;gap:3px;border-radius:12px;background:rgba(0,0,0,.18);padding:3px}
-    .tab{border:0;color:rgba(255,255,255,.79);font-size:11px;cursor:pointer;padding:7px 9px;background:transparent;border-radius:10px;font-family:inherit}
+    .tab{border:0;color:rgba(255,255,255,.79);font-size:11px;cursor:pointer;padding:7px 9px;background:transparent;border-radius:10px;font-family:inherit;touch-action:manipulation;user-select:none}
     .tab[aria-selected=true]{color:#fff;background:rgba(255,255,255,.25);font-weight:750}
     .forecast{display:grid;grid-template-columns:repeat(var(--slots,5),minmax(0,1fr));gap:6px}
     .forecast-row{flex-direction:column;align-items:center;justify-content:center;gap:5px;text-align:center;min-width:0;
@@ -112,6 +118,13 @@
       this._forecasts = {hourly:[],daily:[]}; this._unsub = [];
       this._subscriptionKey = ''; this._subscriptionEpoch = 0;
       this.shadowRoot.addEventListener('click', event => this._click(event));
+      // Desktop dashboards can treat mouse/pointer down as a card-drag gesture.
+      // Keep control interactions inside this shadow tree so the click is delivered.
+      for (const type of ['pointerdown', 'mousedown']) {
+        this.shadowRoot.addEventListener(type, event => {
+          if (event.target.closest?.('button[data-action]')) event.stopPropagation();
+        });
+      }
       this.shadowRoot.addEventListener('keydown', event => {
         if ((event.key === 'Enter' || event.key === ' ') && event.target.closest('[data-action="more"]')) {
           event.preventDefault(); this._moreInfo();
@@ -171,6 +184,8 @@
     _click(event){
       const button = event.target.closest('button[data-action]');
       if (button) {
+        event.stopPropagation?.();
+        event.preventDefault?.();
         const action = button.dataset.action;
         if (action === 'mode') this._mode = this._mode === 'detailed' ? 'compact':'detailed';
         if (action === 'hourly' || action === 'daily') this._tab = action;
@@ -226,9 +241,7 @@
       const weatherText = t.condition[weather] || escapeHtml(weather?.replaceAll('-', ' ') || '—');
       const sourceStamp = compactDate(a.last_refresh,tz,code,'clock');
       const forecastAvailable = this._config.show_forecast !== false && !compact;
-      const header = `<div class="head"><div><div class="eyebrow">${escapeHtml(t.weather)}</div>
-        <div class="title">${escapeHtml(this._config.name || a.friendly_name || this._config.entity || 'VN Weather HA')}</div></div>
-        <button class="mode" type="button" data-action="mode" aria-label="${escapeHtml(compact?t.detailed:t.compact)}">${escapeHtml(compact?t.detailed:t.compact)} ⇄</button></div>`;
+
       let body = present ? `<div class="hero" data-action="more" role="button" tabindex="0" title="More info">
         <div><div class="temperature">${escapeHtml(temp||'—')}</div><div class="description">${weatherText}</div>
         <div class="subtext">${escapeHtml(t.feels)}: ${escapeHtml(metricValue(a.apparent_temperature,unit,1)||'—')}</div></div>
@@ -250,20 +263,72 @@
         const shown = compact ? visible.slice(0,3) : visible;
         body += `<div class="metrics">${shown.map(x=>this._metric(...x)).join('')}</div>`;
       }
-      if (forecastAvailable) body += `<div class="line"></div><section aria-label="Forecast">
-        <div class="section-bar"><span class="section-title">${escapeHtml(t.weather)}</span>
-        <div class="tabs" role="tablist"><button class="tab" type="button" data-action="hourly" role="tab" aria-selected="${this._tab==='hourly'}">${escapeHtml(t.hourly)}</button>
-        <button class="tab" type="button" data-action="daily" role="tab" aria-selected="${this._tab==='daily'}">${escapeHtml(t.daily)}</button></div></div>
-        ${this._forecastMarkup(t,code,tz)}</section>`;
-      if (a.is_stale) body += `<div class="notice" role="status">⚠ ${escapeHtml(t.stale)}</div>`;
+      const notice = a.is_stale ? `<div class="notice" role="status">⚠ ${escapeHtml(t.stale)}</div>` : '';
+      let footer = '';
       if (this._config.show_source !== false && present) {
-        body += `<div class="bottom"><span class="source ${a.is_stale?'stale':''}"><i class="dot" aria-hidden="true"></i>
+        footer = `<div class="bottom"><span class="source ${a.is_stale?'stale':''}"><i class="dot" aria-hidden="true"></i>
           ${escapeHtml(t.source)}: ${escapeHtml(source)}${a.model ? ` · ${escapeHtml(a.model)}`:''}</span>
           ${a.last_refresh ? `<span>${escapeHtml(t.updated)} ${escapeHtml(sourceStamp)}</span>`:''}</div>
           <div class="attribution">${a.data_source==='met_norway'?'Weather data: MET Norway':'Weather data: Open-Meteo.com (CC BY 4.0)'}</div>`;
       }
-      this.shadowRoot.innerHTML = `<style>${STYLE}</style><ha-card class="${category} ${compact?'compact':''}" aria-label="VN Weather HA">
-        <div class="ambient"></div><div class="main">${header}${body}</div></ha-card>`;
+
+      // The click target and forecast tab buttons must be persistent DOM nodes.
+      // HA can update hass between desktop pointerdown and mouseup; replacing
+      // shadowRoot.innerHTML during this interval discards the pressed button,
+      // so the browser does not dispatch a click. Never reconstruct the shell.
+      if (!this._shellReady) {
+        this.shadowRoot.innerHTML = `<style>${STYLE}</style><ha-card aria-label="VN Weather HA">
+          <div class="ambient"></div><div class="main">
+          <div class="head"><div class="head-copy"><div class="eyebrow"></div><div class="title"></div></div>
+          <button class="mode" type="button" data-action="mode"></button></div>
+          <div class="conditions"></div>
+          <div class="forecast-shell"><div class="line"></div><section aria-label="Forecast">
+          <div class="section-bar"><span class="section-title"></span><div class="tabs" role="tablist">
+          <button class="tab" type="button" data-action="hourly" role="tab"></button>
+          <button class="tab" type="button" data-action="daily" role="tab"></button></div></div>
+          <div class="forecast-content"></div></section></div>
+          <div class="notice-slot"></div><div class="footer-slot"></div>
+          </div></ha-card>`;
+        this._shellReady = true;
+      }
+      const root = this.shadowRoot;
+      const card = root.querySelector('ha-card');
+      const cardClass = `${category} ${compact?'compact':''}`.trim();
+      if (card.className !== cardClass) card.className = cardClass;
+      const setText = (selector, value) => {
+        const el = root.querySelector(selector);
+        if (el.textContent !== value) el.textContent = value;
+      };
+      const setMarkup = (selector, value) => {
+        const el = root.querySelector(selector);
+        if (el._vnhMarkup !== value) {
+          el.innerHTML = value;
+          el._vnhMarkup = value;
+        }
+      };
+      setText('.eyebrow', t.weather);
+      setText('.title', String(this._config.name || a.friendly_name || this._config.entity || 'VN Weather HA'));
+      const modeButton = root.querySelector('.mode');
+      const modeText = `${compact?t.detailed:t.compact} ⇄`;
+      if (modeButton.textContent !== modeText) modeButton.textContent = modeText;
+      modeButton.setAttribute('aria-label', compact?t.detailed:t.compact);
+      modeButton.setAttribute('aria-pressed', String(compact));
+      setMarkup('.conditions', body);
+      const forecastShell = root.querySelector('.forecast-shell');
+      forecastShell.hidden = !forecastAvailable;
+      if (forecastAvailable) {
+        setText('.section-title', t.weather);
+        for (const forecastType of ['hourly', 'daily']) {
+          const tab = root.querySelector(`.tab[data-action="${forecastType}"]`);
+          const label = forecastType === 'hourly' ? t.hourly : t.daily;
+          if (tab.textContent !== label) tab.textContent = label;
+          tab.setAttribute('aria-selected', String(this._tab === forecastType));
+        }
+        setMarkup('.forecast-content', this._forecastMarkup(t,code,tz));
+      }
+      setMarkup('.notice-slot', notice);
+      setMarkup('.footer-slot', footer);
+
     }
   }
 
