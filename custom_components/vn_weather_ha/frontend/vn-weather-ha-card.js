@@ -82,6 +82,25 @@
     catch(_e){delete options.timeZone;return format();}
   };
 
+  // Current local calendar date for the optional subtitle below the location.
+  // The selected weather entity's timezone wins, then HA's timezone, then the browser.
+  const FULL_WEEKDAYS_VI=Object.freeze({Sunday:'Chủ Nhật',Monday:'Thứ Hai',Tuesday:'Thứ Ba',
+    Wednesday:'Thứ Tư',Thursday:'Thứ Năm',Friday:'Thứ Sáu',Saturday:'Thứ Bảy'});
+  const headerDate = (date,tz,locale) => {
+    const options={weekday:'long',day:'2-digit',month:'2-digit',year:'numeric'};
+    if(tz)options.timeZone=tz;
+    const format=()=>{
+      if(locale!=='vi')return new Intl.DateTimeFormat('en-US',{
+        ...options,day:'numeric',month:'short'}).format(date);
+      const parts=new Intl.DateTimeFormat('en-US',options).formatToParts(date);
+      const part=type=>parts.find(item=>item.type===type)?.value||'';
+      return `${FULL_WEEKDAYS_VI[part('weekday')]||part('weekday')}, ${part('day')}/${part('month')}/${part('year')}`;
+    };
+    try{return format();}catch(_e){delete options.timeZone;return format();}
+  };
+
+  const CALENDAR_ICON='<svg class="date-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18"/></svg>';
+
   // Small hand-drawn SVG weather glyphs: fast, crisp at every scale, no external fonts/images.
   const weatherIcon = (condition,large=false,night=false) => {
     const kind = SYMBOL[condition] || 'cloud';
@@ -208,11 +227,18 @@
     .paused .particle,.paused .weather-effects:after,.paused .symbol .weather-icon{animation-play-state:paused!important}
     .main{position:relative;z-index:5;padding:22px 22px 18px;}
     .head,.hero,.bottom,.section-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;}
-    .head{min-height:57px}.head-copy{min-width:0;flex:1}
+    .head{min-height:57px;align-items:flex-start}.head-copy{min-width:0;flex:1}
     .eyebrow{font-size:10px;letter-spacing:.18em;font-weight:800;color:#d1f7ff;}
     .title{margin:6px 0 0;font-weight:760;font-size:22px;letter-spacing:-.025em;overflow-wrap:anywhere}
+    /* Subtle calendar subtitle; never reserves space when its setting is off. */
+    .date-line{display:flex;align-items:center;gap:6px;margin-top:4px;color:#dceeff;font-size:12px;font-weight:600;line-height:1.35;
+      letter-spacing:.005em;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;
+      text-shadow:0 1px 4px rgba(2,13,35,.45)}
+    .date-line[hidden]{display:none}
+    .date-icon{width:13px;height:13px;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:1.8;
+      stroke-linecap:round;stroke-linejoin:round;opacity:.92}
     button{font-family:inherit;touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
-    .mode{font-size:12px;font-weight:750;padding:10px 14px;min-height:38px;max-width:110px;flex-shrink:0;border-radius:999px;
+    .mode{margin-top:10px;font-size:12px;font-weight:750;padding:10px 14px;min-height:38px;max-width:110px;flex-shrink:0;border-radius:999px;
       border:1px solid rgba(229,246,255,.70);color:#fff;cursor:pointer;
       background:linear-gradient(150deg,rgba(226,251,255,.28),rgba(16,66,112,.66));
       box-shadow:inset 0 1px rgba(255,255,255,.37),0 4px 13px rgba(1,14,45,.24);}
@@ -285,7 +311,8 @@
     .stale .dot{background:#ffcd6b}.attribution{font-size:9px;color:var(--vnh-muted);margin-top:9px;opacity:.89}
     .notice{font-size:12px;background:rgba(255,198,84,.19);border:1px solid rgba(255,224,142,.5);padding:9px 11px;border-radius:10px;margin-top:10px}
     .empty{color:#f2f9ff;font-size:13px;padding:18px 0;line-height:1.6}.compact .main{padding:18px}
-    .compact .hero{margin:8px 0 12px;min-height:100px}.compact .temperature{font-size:54px}.compact .symbol{max-width:120px}
+    .compact .hero{margin:8px 0 12px;min-height:100px}
+    .compact.has-date .hero{margin-top:5px}.compact .temperature{font-size:54px}.compact .symbol{max-width:120px}
     .compact .sun-track{display:none}.compact .tile{min-height:59px;padding:9px}.compact .value{font-size:13px}
     .compact .metrics{grid-template-columns:repeat(3,minmax(0,1fr))}
     @keyframes iconfloat{50%{transform:translateY(-5px)}}
@@ -296,13 +323,14 @@
     @keyframes flash{0%,96%,100%{opacity:0}97%{opacity:.35}98%{opacity:0}98.7%{opacity:.18}}
     @media(max-width:390px){.main{padding:18px 14px 15px}.temperature{font-size:58px}.hero{min-height:132px}.metrics{gap:6px}
       .tile{padding:10px 8px;min-height:65px}.value{font-size:12px}.key{font-size:10px}.forecast-row{min-width:72px}
-      .forecast-shell{padding:12px 8px}.sun-track{gap:9px}}
+      .forecast-shell{padding:12px 8px}.sun-track{gap:9px}.date-line{font-size:11px}}
     @media(max-width:320px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.symbol{width:98px}.temperature{font-size:49px}}
     @media(prefers-reduced-motion:reduce){.weather-effects,.symbol .weather-icon{animation:none!important}.weather-effects .particle{animation:none!important;display:none!important}
       .tile,.forecast-row{transition:none!important}}
   `;
 
   const DEFAULTS = Object.freeze({mode:'detailed',forecast_type:'daily',forecast_slots:7,show_forecast:true,show_source:true,
+    show_date:false,
     theme:'auto',effects:'subtle',background_transparency:8,contrast:'auto',auto_day_night:true,language:'auto',
     background_style:'photos',background_image_ext:'webp',background_base_url:DEFAULT_PHOTO_BASE,panel_style:'glow'});
 
@@ -453,11 +481,14 @@
     _checkTimeTransition(){const a=this._hass?.states?.[this._config.entity]?.attributes||{};
       const tz=a.time_zone||this._hass?.config?.time_zone;
       const stage=this._phase(a,this._hass?.states?.[this._config.entity]?.state,tz);
-      if(stage!==this._lastPhase)this._render();}
+      const nextDate=this._config.show_date===true?headerDate(new Date(),tz,this._tr().code):'';
+      if(stage!==this._lastPhase||nextDate!==this._lastDateLabel)this._render();}
     _render(){
       if(!this.shadowRoot)return;
       const {t,code}=this._tr(),s=this._hass?.states?.[this._config.entity],a=s?.attributes||{};
       const tz=a.time_zone||this._hass?.config?.time_zone||undefined,weather=s?.state||'';
+      const today=this._config.show_date===true?headerDate(new Date(),tz,code):'';
+      this._lastDateLabel=today;
       const present=!!s&&weather!=='unknown'&&weather!=='unavailable';
       const phase=this._phase(a,weather,tz),kind=this._weatherKind(weather,a),theme=this._theme(phase,kind,weather);
       this._lastPhase=phase;
@@ -495,6 +526,7 @@
       // Allow lightweight, DOM-less CommonJS smoke checks; actual HA always has querySelector.
       if(typeof this.shadowRoot.querySelector!=='function'){
         this.shadowRoot.innerHTML=`<ha-card><div class="eyebrow">${escapeHtml(t.weather)}</div><div class="title">${escapeHtml(this._config.name||a.friendly_name||this._config.entity||'VN Weather HA')}</div>
+          ${today?`<div class="date-line">${CALENDAR_ICON}<span>${escapeHtml(today)}</span></div>`:''}
           ${body}${this._config.show_forecast!==false&&!compact?this._forecastMarkup(t,code,tz):''}${notice}${footer}</ha-card>`;
         return;
       }
@@ -502,7 +534,7 @@
       if(!this._shellReady){
         this.shadowRoot.innerHTML=`<style>${STYLE}</style><ha-card aria-label="VN Weather HA">
           <div class="scene"><div class="scene-vector"></div><img class="scene-photo" alt="" aria-hidden="true" decoding="async" loading="lazy" /></div><div class="shade"></div><div class="weather-tint"></div><div class="weather-effects">${this._weatherParticles()}</div>
-          <div class="main"><header class="head"><div class="head-copy"><div class="eyebrow"></div><div class="title"></div></div>
+          <div class="main"><header class="head"><div class="head-copy"><div class="eyebrow"></div><div class="title"></div><div class="date-line" hidden>${CALENDAR_ICON}<span class="date-text"></span></div></div>
           <button class="mode" type="button" data-action="mode"></button></header>
           <div class="conditions"></div><div class="forecast-shell"><div class="line"></div><section aria-label="Forecast">
           <div class="section-bar"><span class="section-title"></span><div class="tabs" role="tablist">
@@ -517,7 +549,7 @@
       }
       const root=this.shadowRoot,card=root.querySelector('ha-card');
       const hi=this._config.contrast==='high';
-      const classes=`theme-${theme} phase-${phase} weather-${kind} effect-${this._config.effects} surface-${this._config.panel_style} ${hi?'is-high-contrast ':''}${compact?'compact':''}`.trim();
+      const classes=`theme-${theme} phase-${phase} weather-${kind} effect-${this._config.effects} surface-${this._config.panel_style} ${hi?'is-high-contrast ':''}${compact?'compact ':''}${today?'has-date':''}`.trim();
       if(card.className!==classes)card.className=classes;
       const alpha=String((100-this._config.background_transparency)/100);
       if(card.style.getPropertyValue('--vnh-card-alpha')!==alpha)card.style.setProperty('--vnh-card-alpha',alpha);
@@ -538,6 +570,9 @@
       const setMarkup=(selector,html)=>{const el=root.querySelector(selector);if(el._vnhMarkup!==html){el.innerHTML=html;el._vnhMarkup=html;}};
       setText('.eyebrow',t.weather);
       setText('.title',String(this._config.name||a.friendly_name||this._config.entity||'VN Weather HA'));
+      const dateLine=root.querySelector('.date-line');
+      dateLine.hidden=!today;
+      if(today)setText('.date-text',today);
       const modeButton=root.querySelector('.mode'),modeText=`${compact?t.detailed:t.compact} ⇄`;
       if(modeButton.textContent!==modeText)modeButton.textContent=modeText;
       modeButton.setAttribute('aria-label',compact?t.detailed:t.compact);
@@ -600,6 +635,7 @@
           <label>Kiểu dự báo <select name="forecast_type"><option value="hourly">Theo giờ</option><option value="daily">Theo ngày</option></select></label>
           <label>Số dự báo <select name="forecast_slots">${[3,4,5,6,7,8].map(v=>`<option value="${v}">${v}</option>`).join('')}</select></label>
           <label>Ngôn ngữ <select name="language"><option value="auto">Theo Home Assistant</option><option value="vi">Tiếng Việt</option><option value="en">English</option></select></label>
+          <label class="check"><input name="show_date" type="checkbox" />Hiện thứ, ngày/tháng/năm dưới tên địa điểm</label>
           <label class="check"><input name="show_forecast" type="checkbox" />Hiện dự báo</label>
           <label class="check"><input name="show_source" type="checkbox" />Hiện nguồn dữ liệu / giờ cập nhật</label>
         </div>

@@ -1,6 +1,6 @@
 """Constants and weather field definitions for VN Weather HA."""
 DOMAIN = "vn_weather_ha"
-VERSION = "0.3.3"
+VERSION = "0.3.4"
 PLATFORMS = ["weather", "sensor"]
 CONF_MODEL = "model"
 CONF_FALLBACK = "met_fallback"
