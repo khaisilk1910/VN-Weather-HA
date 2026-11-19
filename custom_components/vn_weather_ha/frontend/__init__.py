@@ -17,6 +17,7 @@ from ..const import DOMAIN, VERSION
 
 _LOGGER = logging.getLogger(__name__)
 CARD_URL = f"/{DOMAIN}/vn-weather-ha-card.js"
+BACKGROUND_URL = f"/{DOMAIN}/backgrounds"
 RESOURCE_URL = f"{CARD_URL}?v={VERSION}"
 
 
@@ -27,7 +28,10 @@ async def async_register_frontend(hass: HomeAssistant) -> None:
         if not state.get("static_registered"):
             try:
                 await hass.http.async_register_static_paths(
-                    [StaticPathConfig(CARD_URL, Path(__file__).parent / "vn-weather-ha-card.js", False)]
+                    [
+                        StaticPathConfig(CARD_URL, Path(__file__).parent / "vn-weather-ha-card.js", False),
+                        StaticPathConfig(BACKGROUND_URL, Path(__file__).parent / "backgrounds", False),
+                    ]
                 )
             except (OSError, RuntimeError, ValueError) as exc:
                 _LOGGER.warning("VN Weather card static path unavailable: %s", exc)
